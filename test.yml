@@ -1,0 +1,163 @@
+#-------------------------
+# Namespace
+#-------------------------
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: hello
+  labels:
+    name: hello
+#-------------------------
+# Deployment
+#-------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: hello
+  name: hr-web
+  labels:
+    app: hr-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hr-web
+  template:
+    metadata:
+      labels:
+        app: hr-web
+    spec:
+      containers:
+      - name: hr-web
+        image: httpd:alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+#-------------------------
+# Secret
+#-------------------------
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+type: Opaque
+data:
+    username: $(echo -n "username" | base64 -w0)
+    password: $(echo -n "password" | base64 -w0)
+#-------------------------
+# Service
+#-------------------------
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: messaging-service
+spec:
+  type: ClusterIP
+  selector:
+    app: messaging-service
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hr-web-app
+spec:
+  type: NodePort
+  selector:
+    app: hr-web
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    nodePort: 30082
+#-------------------------
+# Pod
+#-------------------------
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  namespace: hello
+  labels:
+    tier: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:alpine
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: messaging
+  namespace: hello
+  labels:
+    tier: msg
+spec:
+  containers:
+  - name: redis
+    image: redis:alpine
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+  namespace: default
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: scripts
+      mountPath: /scripts/run.sh
+      subPath: run.sh
+    command: ["/scripts/run.sh"]
+  volumes:
+  - name: scripts
+    configMap:
+      name: data-script
+      defaultMode: 0744
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: temp-bus
+  namespace: finance
+  labels:
+    name: temp-bus
+spec:
+  containers:
+  - name: redis
+    image: redis:alpine
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 6379
+#-------------------------
+# Configmap
+#-------------------------
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-script
+  namespace: default
+data:
+  run.sh: |
+    #!/bin/bash
+    date "+%Y-%m-%d"
+    sleep 1000
